@@ -21,8 +21,7 @@ admin.initializeApp({
 
 // ================== MongoDB Atlas ==================
 const MONGO_URI = process.env.MONGO_URI || "mongodb+srv://assigment-ten:rGpocyaWmpBdTy5Z@cluster0.5q9kkgs.mongodb.net/?appName=Cluster0";
-const client = new MongoClient(MONGO_URI);  // <- remove unsupported options
-
+const client = new MongoClient(MONGO_URI);
 await client.connect();
 const db = client.db('assignmentTen_db'); // DB name
 const habitsCollection = db.collection('habits');
@@ -62,13 +61,15 @@ function calculateStreak(completionHistory = []) {
   return streak;
 }
 
-// ================== Routes ==================
+// ================== Router ==================
 
-// Health check
-app.get('/', (req, res) => res.send({ message: 'Server is running ✅' }));
+const router = express.Router();
+
+
+router.get('/', (req, res) => res.send({ message: 'API is running ✅' }));
 
 // Add new habit
-app.post('/habits', verifyFirebaseToken, async (req, res) => {
+router.post('/habits', verifyFirebaseToken, async (req, res) => {
   try {
     const habit = {
       ...req.body,
@@ -84,8 +85,8 @@ app.post('/habits', verifyFirebaseToken, async (req, res) => {
   }
 });
 
-// Get latest habits (featured)
-app.get('/habits/latest', async (req, res) => {
+// Get latest habits
+router.get('/habits/latest', async (req, res) => {
   try {
     const habits = await habitsCollection.find().sort({ createdAt: -1 }).limit(6).toArray();
     habits.forEach(h => (h.currentStreak = calculateStreak(h.completionHistory)));
@@ -95,8 +96,8 @@ app.get('/habits/latest', async (req, res) => {
   }
 });
 
-// Get public habits with search & filter
-app.get('/habits/public', async (req, res) => {
+// Get public habits
+router.get('/habits/public', async (req, res) => {
   try {
     const { search, categories } = req.query;
     const filter = {};
@@ -111,7 +112,7 @@ app.get('/habits/public', async (req, res) => {
 });
 
 // Get my habits
-app.get('/habits/my', verifyFirebaseToken, async (req, res) => {
+router.get('/habits/my', verifyFirebaseToken, async (req, res) => {
   try {
     const habits = await habitsCollection.find({ userEmail: req.user.email }).toArray();
     habits.forEach(h => (h.currentStreak = calculateStreak(h.completionHistory)));
@@ -122,7 +123,7 @@ app.get('/habits/my', verifyFirebaseToken, async (req, res) => {
 });
 
 // Get habit by ID
-app.get('/habits/:id', async (req, res) => {
+router.get('/habits/:id', async (req, res) => {
   try {
     const habit = await habitsCollection.findOne({ _id: new ObjectId(req.params.id) });
     if (!habit) return res.status(404).send({ message: 'Habit not found' });
@@ -134,7 +135,7 @@ app.get('/habits/:id', async (req, res) => {
 });
 
 // Update habit
-app.patch('/habits/:id', verifyFirebaseToken, async (req, res) => {
+router.patch('/habits/:id', verifyFirebaseToken, async (req, res) => {
   try {
     const habit = await habitsCollection.findOne({ _id: new ObjectId(req.params.id) });
     if (!habit) return res.status(404).send({ message: 'Habit not found' });
@@ -150,7 +151,7 @@ app.patch('/habits/:id', verifyFirebaseToken, async (req, res) => {
 });
 
 // Delete habit
-app.delete('/habits/:id', verifyFirebaseToken, async (req, res) => {
+router.delete('/habits/:id', verifyFirebaseToken, async (req, res) => {
   try {
     const habit = await habitsCollection.findOne({ _id: new ObjectId(req.params.id) });
     if (!habit) return res.status(404).send({ message: 'Habit not found' });
@@ -164,7 +165,7 @@ app.delete('/habits/:id', verifyFirebaseToken, async (req, res) => {
 });
 
 // Mark habit complete
-app.post('/habits/:id/complete', verifyFirebaseToken, async (req, res) => {
+router.post('/habits/:id/complete', verifyFirebaseToken, async (req, res) => {
   try {
     const habit = await habitsCollection.findOne({ _id: new ObjectId(req.params.id) });
     if (!habit) return res.status(404).send({ message: 'Habit not found' });
@@ -185,6 +186,9 @@ app.post('/habits/:id/complete', verifyFirebaseToken, async (req, res) => {
     res.status(500).send({ message: err.message });
   }
 });
+
+
+app.use('/api', router);
 
 // ================== Start Server ==================
 app.listen(PORT, () => console.log(`Server running on http://localhost:${PORT}`));

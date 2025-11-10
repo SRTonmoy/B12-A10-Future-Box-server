@@ -3,6 +3,7 @@ import cors from "cors";
 import dotenv from "dotenv";
 import { MongoClient, ServerApiVersion, ObjectId } from "mongodb";
 import admin from "firebase-admin";
+import fs from "fs";
 
 dotenv.config();
 const app = express();
@@ -64,6 +65,15 @@ async function run() {
       if (existing) return res.send({ message: "User already exists" });
       const result = await usersCollection.insertOne(user);
       res.send(result);
+    });
+
+    // ----------------- HABITS -----------------
+    app.get("/habits/latest", async (req, res) => {
+      const habits = await habitsCollection.find({ isPublic: true })
+        .sort({ createdAt: -1 })
+        .limit(6)
+        .toArray();
+      res.send(habits);
     });
 // --- Async DB Run ---
 

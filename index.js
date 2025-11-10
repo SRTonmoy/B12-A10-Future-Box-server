@@ -4,7 +4,6 @@ import dotenv from 'dotenv';
 import cors from 'cors';
 import admin from 'firebase-admin';
 import fs from 'fs';
-const serviceAccount = JSON.parse(fs.readFileSync('./firebaseServiceAccount.json', 'utf-8'));
 
 dotenv.config();
 
@@ -14,18 +13,21 @@ app.use(express.json());
 
 const PORT = process.env.PORT || 3000;
 
-// Firebase admin init
+// ================== Firebase Admin ==================
+const serviceAccount = JSON.parse(fs.readFileSync('./firebaseServiceAccount.json', 'utf-8'));
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount),
 });
 
-// MongoDB connection
-const client = new MongoClient(process.env.MONGO_URI || "mongodb+srv://assigment-ten:rGpocyaWmpBdTy5Z@cluster0.5q9kkgs.mongodb.net/?appName=Cluster0");
+// ================== MongoDB Atlas ==================
+const MONGO_URI = process.env.MONGO_URI || "mongodb+srv://assigment-ten:rGpocyaWmpBdTy5Z@cluster0.5q9kkgs.mongodb.net/?appName=Cluster0";
+const client = new MongoClient(MONGO_URI);  // <- remove unsupported options
+
 await client.connect();
-const db = client.db('habitHub_db');
+const db = client.db('assignmentTen_db'); // DB name
 const habitsCollection = db.collection('habits');
 
-// ---------- Middleware ----------
+// ================== Middleware ==================
 async function verifyFirebaseToken(req, res, next) {
   const authHeader = req.headers.authorization || '';
   if (!authHeader.startsWith('Bearer ')) return res.status(401).send({ message: 'Unauthorized' });
@@ -40,13 +42,10 @@ async function verifyFirebaseToken(req, res, next) {
   }
 }
 
-// ---------- Helpers ----------
+// ================== Helpers ==================
 function calculateStreak(completionHistory = []) {
   if (!completionHistory.length) return 0;
-  const sorted = completionHistory
-    .map(d => new Date(d))
-    .sort((a, b) => b - a);
-
+  const sorted = completionHistory.map(d => new Date(d)).sort((a, b) => b - a);
   let streak = 0;
   let lastDate = new Date();
   lastDate.setHours(0, 0, 0, 0);
@@ -63,18 +62,23 @@ function calculateStreak(completionHistory = []) {
   return streak;
 }
 
-// ---------- Routes ----------
+// ================== Routes ==================
+
+// Health check
+app.get('/', (req, res) => res.send({ message: 'Server is running ✅' }));
 
 // Add new habit
 app.post('/habits', verifyFirebaseToken, async (req, res) => {
   try {
     const habit = {
       ...req.body,
+      userEmail: req.user.email,
+      userId: req.user.uid,
       createdAt: new Date(),
       completionHistory: [],
     };
     const result = await habitsCollection.insertOne(habit);
-    res.send({ habit: { _id: result.insertedId, ...habit } });
+    res.status(201).send({ habit: { _id: result.insertedId, ...habit } });
   } catch (err) {
     res.status(500).send({ message: err.message });
   }
@@ -91,14 +95,13 @@ app.get('/habits/latest', async (req, res) => {
   }
 });
 
-// Get public habits (search & filter)
+// Get public habits with search & filter
 app.get('/habits/public', async (req, res) => {
   try {
     const { search, categories } = req.query;
     const filter = {};
     if (search) filter.title = { $regex: search, $options: 'i' };
     if (categories) filter.category = { $in: categories.split(',') };
-
     const habits = await habitsCollection.find(filter).toArray();
     habits.forEach(h => (h.currentStreak = calculateStreak(h.completionHistory)));
     res.send({ habits });
@@ -118,7 +121,7 @@ app.get('/habits/my', verifyFirebaseToken, async (req, res) => {
   }
 });
 
-// Get habit by id
+// Get habit by ID
 app.get('/habits/:id', async (req, res) => {
   try {
     const habit = await habitsCollection.findOne({ _id: new ObjectId(req.params.id) });
@@ -160,7 +163,7 @@ app.delete('/habits/:id', verifyFirebaseToken, async (req, res) => {
   }
 });
 
-// Mark complete
+// Mark habit complete
 app.post('/habits/:id/complete', verifyFirebaseToken, async (req, res) => {
   try {
     const habit = await habitsCollection.findOne({ _id: new ObjectId(req.params.id) });
@@ -170,6 +173,7 @@ app.post('/habits/:id/complete', verifyFirebaseToken, async (req, res) => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const alreadyDone = habit.completionHistory.some(d => new Date(d).toDateString() === today.toDateString());
+
     if (!alreadyDone) {
       habit.completionHistory.push(today.toISOString());
       await habitsCollection.updateOne({ _id: habit._id }, { $set: { completionHistory: habit.completionHistory } });
@@ -182,8 +186,5 @@ app.post('/habits/:id/complete', verifyFirebaseToken, async (req, res) => {
   }
 });
 
-// ---------- Start server ----------
+// ================== Start Server ==================
 app.listen(PORT, () => console.log(`Server running on http://localhost:${PORT}`));
-app.get('/', (req, res) => {
-  res.send('Server is running ✅');
-});

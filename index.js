@@ -9,10 +9,11 @@ dotenv.config();
 const app = express();
 const port = process.env.PORT || 3000;
 
-// --- Middleware ---
+// Middleware
 app.use(cors());
 app.use(express.json());
-/ Initialize Firebase Admin
+
+// Initialize Firebase Admin
 const serviceAccount = JSON.parse(fs.readFileSync("./firebase-admin-key.json", "utf8"));
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount)
@@ -34,18 +35,16 @@ const verifyFirebaseToken = async (req, res, next) => {
     return res.status(401).send({ message: "Invalid or expired token" });
   }
 };
-// --- MongoDB Connection ---
-const uri = process.env.MONGO_URI || "mongodb+srv://assigment-ten:rGpocyaWmpBdTy5Z@cluster0.5q9kkgs.mongodb.net/?appName=Cluster0";
 
-const client = new MongoClient(uri, {
+// MongoDB setup
+const uri = process.env.MONGO_URI || "mongodb+srv://assigment-ten:rGpocyaWmpBdTy5Z@cluster0.5q9kkgs.mongodb.net/?appName=Cluster0";const client = new MongoClient(uri, {
   serverApi: {
     version: ServerApiVersion.v1,
     strict: true,
-    deprecationErrors: true,
-  },
+    deprecationErrors: true
+  }
 });
 
-// --- Start Server ---
 // Main route
 app.get("/", (req, res) => {
   res.send("✅ Habit Hub Server is running successfully!");
@@ -85,19 +84,61 @@ async function run() {
       res.send(habits);
     });
 
-// --- Async DB Run ---
+    app.get("/habits/my", verifyFirebaseToken, async (req, res) => {
+      const email = req.userEmail;
+      const habits = await habitsCollection.find({ userEmail: email }).toArray();
+      res.send(habits);
+    });
 
-    // ✅ Ping
-    await client.db("admin").command({ ping: 1 });
-    console.log("✅ Connected to MongoDB Atlas successfully!");
+    app.post("/habits", verifyFirebaseToken, async (req, res) => {
+      const habit = req.body;
+      habit.createdAt = new Date();
+      habit.completionHistory = [];
+      habit.streak = 0;
+      const result = await habitsCollection.insertOne(habit);
+      res.send(result);
+    });
 
+    app.patch("/habits/:id", verifyFirebaseToken, async (req, res) => {
+      const { id } = req.params;
+      const updated = req.body;
+      const result = await habitsCollection.updateOne(
+        { _id: new ObjectId(id) },
+        { $set: updated }
+      );
+      res.send(result);
+    });
+
+    app.delete("/habits/:id", verifyFirebaseToken, async (req, res) => {
+      const { id } = req.params;
+      const result = await habitsCollection.deleteOne({ _id: new ObjectId(id) });
+      res.send(result);
+    });
+
+    app.post("/habits/:id/complete", verifyFirebaseToken, async (req, res) => {
+      const { id } = req.params;
+      const today = new Date().toISOString().split("T")[0];
+      const habit = await habitsCollection.findOne({ _id: new ObjectId(id) });
+      const alreadyDone = habit.completionHistory?.some(
+        (d) => d === today
+      );
+      if (alreadyDone) return res.send({ message: "Already marked complete today" });
+
+      const result = await habitsCollection.updateOne(
+        { _id: new ObjectId(id) },
+        { $push: { completionHistory: today } }
+      );
+      res.send(result);
+    });
+
+    console.log("✅ Connected to MongoDB successfully!");
   } catch (err) {
-    console.error("❌ MongoDB Connection Error:", err);
+    console.error(err);
   }
 }
-run();
 
-// --- Listen on Port ---
+run().catch(console.dir);
+
 app.listen(port, () => {
-  console.log(`🚀 Server running on port ${port}`);
+  console.log(`🚀 Habit Hub server running on port ${port}`);
 });

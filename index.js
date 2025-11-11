@@ -23,7 +23,7 @@ admin.initializeApp({
 const MONGO_URI = process.env.MONGO_URI || "mongodb+srv://assigment-ten:rGpocyaWmpBdTy5Z@cluster0.5q9kkgs.mongodb.net/?appName=Cluster0";
 const client = new MongoClient(MONGO_URI);
 await client.connect();
-const db = client.db('assignmentTen_db'); // DB name
+const db = client.db('assignmentTen_db');
 const habitsCollection = db.collection('habits');
 
 // ================== Middleware ==================
@@ -41,32 +41,38 @@ async function verifyFirebaseToken(req, res, next) {
   }
 }
 
-// ================== Helpers ==================
+// ================== Helper Function ==================
 function calculateStreak(completionHistory = []) {
   if (!completionHistory.length) return 0;
-  const sorted = completionHistory.map(d => new Date(d)).sort((a, b) => b - a);
-  let streak = 0;
-  let lastDate = new Date();
-  lastDate.setHours(0, 0, 0, 0);
 
-  for (let d of sorted) {
-    const date = new Date(d);
-    date.setHours(0, 0, 0, 0);
-    const diffDays = Math.round((lastDate - date) / (1000 * 60 * 60 * 24));
-    if (diffDays === 0 || diffDays === 1) {
+  // Convert and sort dates descending
+  const sorted = completionHistory
+    .map(d => new Date(d))
+    .sort((a, b) => b - a);
+
+  let streak = 1;
+  let prev = sorted[0];
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  // If last completion wasn’t today, streak starts from 0
+  if (prev.toDateString() !== today.toDateString()) streak = 0;
+
+  for (let i = 1; i < sorted.length; i++) {
+    const diffDays = Math.round((prev - sorted[i]) / (1000 * 60 * 60 * 24));
+    if (diffDays === 1) {
       streak++;
-      lastDate = new Date(date.getTime() - 24 * 60 * 60 * 1000);
+      prev = sorted[i];
     } else break;
   }
+
   return streak;
 }
 
-// ================== Router ==================
-
+// ================== ROUTES ==================
 const router = express.Router();
 
-
-router.get('/', (req, res) => res.send({ message: 'API is running ' }));
+router.get('/', (req, res) => res.send({ message: 'API is running ✅' }));
 
 // Add new habit
 router.post('/habits', verifyFirebaseToken, async (req, res) => {
@@ -164,20 +170,25 @@ router.delete('/habits/:id', verifyFirebaseToken, async (req, res) => {
   }
 });
 
-// Mark habit complete
+// ✅ Mark habit complete (any user, once per day)
 router.post('/habits/:id/complete', verifyFirebaseToken, async (req, res) => {
   try {
     const habit = await habitsCollection.findOne({ _id: new ObjectId(req.params.id) });
     if (!habit) return res.status(404).send({ message: 'Habit not found' });
-    if (habit.userEmail !== req.user.email) return res.status(403).send({ message: 'Forbidden' });
 
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    const alreadyDone = habit.completionHistory.some(d => new Date(d).toDateString() === today.toDateString());
+
+    const alreadyDone = habit.completionHistory?.some(
+      d => new Date(d).toDateString() === today.toDateString()
+    );
 
     if (!alreadyDone) {
       habit.completionHistory.push(today.toISOString());
-      await habitsCollection.updateOne({ _id: habit._id }, { $set: { completionHistory: habit.completionHistory } });
+      await habitsCollection.updateOne(
+        { _id: habit._id },
+        { $set: { completionHistory: habit.completionHistory } }
+      );
     }
 
     habit.currentStreak = calculateStreak(habit.completionHistory);
@@ -187,12 +198,8 @@ router.post('/habits/:id/complete', verifyFirebaseToken, async (req, res) => {
   }
 });
 
-
 app.use('/api', router);
 
 // ================== Start Server ==================
-app.listen(PORT, () => console.log(`Server running on http://localhost:${PORT}`));
-app.get('/', (req, res) => {
-  res.send('Server is running ✅');
-});
-
+app.listen(PORT, () => console.log(`✅ Server running on http://localhost:${PORT}`));
+app.get('/', (req, res) => res.send('Server is running ✅'));

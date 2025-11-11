@@ -1,4 +1,3 @@
-// index.js (server)
 import express from 'express';
 import { MongoClient, ObjectId } from 'mongodb';
 import dotenv from 'dotenv';
@@ -21,7 +20,7 @@ admin.initializeApp({
 });
 
 // ================== MongoDB Atlas ==================
-const MONGO_URI = process.env.MONGO_URI || "mongodb+srv://assigment-ten:rGpocyaWmpBdTy5Z@cluster0.5q9kkgs.mongodb.net/?appName=Cluster0";
+const MONGO_URI = process.env.MONGO_URI;
 const client = new MongoClient(MONGO_URI);
 await client.connect();
 const db = client.db('assignmentTen_db');
